@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<robot name="go2_on_cart" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:property name="cart_damping"  value="0.0"/>
+  <xacro:property name="cart_friction" value="0.0"/>
+  <xacro:property name="pivot_damping" value="0.001"/>
+
+  <xacro:include filename="$(find unitree_go2_description)/urdf/unitree_go2_robot.xacro"/>
+
+  <link name="world"/>
+
+  <link name="rail_link">
+    <visual><geometry><box size="4.0 0.1 0.05"/></geometry></visual>
+    <collision><geometry><box size="4.0 0.1 0.05"/></geometry></collision>
+    <inertial>
+      <mass value="5.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <joint name="rail_to_world" type="fixed">
+    <parent link="world"/>
+    <child link="rail_link"/>
+  </joint>
+
+  <link name="cart_link">
+    <visual><geometry><box size="1.0 0.5 0.05"/></geometry></visual>
+    <collision><geometry><box size="1.0 0.5 0.05"/></geometry></collision>
+    <inertial>
+      <mass value="2.0"/>
+      <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.005" iyz="0" izz="0.005"/>
+    </inertial>
+  </link>
+
+  <joint name="cart_slide" type="prismatic">
+    <parent link="rail_link"/>
+    <child link="cart_link"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.0" upper="2.0" effort="0" velocity="5.0"/>
+    <dynamics damping="${cart_damping}" friction="${cart_friction}"/>
+  </joint>
+
+  <joint name="pivot" type="revolute">
+    <parent link="cart_link"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0.05" rpy="1.5708 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="0" velocity="10.0"/>
+    <dynamics damping="${pivot_damping}" friction="0.0"/>
+  </joint>
+
+</robot>
