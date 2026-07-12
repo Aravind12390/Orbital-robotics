@@ -1,53 +1,167 @@
 <?xml version="1.0"?>
-<robot name="go2_on_cart" xmlns:xacro="http://ros.org/wiki/xacro">
+<robot name="go2_wheeled_trolley" xmlns:xacro="http://ros.org/wiki/xacro">
 
-  <xacro:property name="cart_damping"  value="0.0"/>
-  <xacro:property name="cart_friction" value="0.0"/>
-  <xacro:property name="pivot_damping" value="0.001"/>
+  <!-- ── Parameters ─────────────────────────────────────────────────── -->
+  <xacro:property name="trolley_l"   value="0.9"/>   <!-- plate length X -->
+  <xacro:property name="trolley_w"   value="0.6"/>   <!-- plate width  Y -->
+  <xacro:property name="trolley_h"   value="0.04"/>  <!-- plate thickness Z -->
+
+  <xacro:property name="wheel_r"     value="0.10"/>  <!-- wheel radius -->
+  <xacro:property name="wheel_t"     value="0.06"/>  <!-- wheel thickness (tyre width) -->
+
+  <!-- Axle bar: square tube that runs Y-axis connecting each wheel pair -->
+  <xacro:property name="axle_w"      value="0.02"/>  <!-- square cross-section side -->
+  <!-- Axle sits below plate; its centre is at z = -(trolley_h/2 + axle_w/2) -->
+  <xacro:property name="axle_drop"   value="${trolley_h/2 + axle_w/2}"/>
+
+  <!-- Wheel X positions: front and rear axle, inset from plate edge -->
+  <xacro:property name="wx"          value="${trolley_l/2 - 0.10}"/>
+  <!-- Wheel Y positions: just outside the plate edge -->
+  <xacro:property name="wy"          value="${trolley_w/2 + wheel_t/2 + 0.01}"/>
+
+  <!-- Ground clearance: axle centre to ground = wheel_r
+       Plate centre above ground = wheel_r + axle_drop -->
+  <xacro:property name="plate_z"     value="${wheel_r + axle_drop + trolley_h/2}"/>
+
+  <!-- Rolling resistance (near zero = microgravity) -->
+  <xacro:property name="mu"          value="0.01"/>
 
   <xacro:include filename="$(find unitree_go2_description)/urdf/unitree_go2_robot.xacro"/>
 
+  <!-- ══════════════════════════════════════════════════════════════════
+       MACRO: single wheel link + revolute joint
+       name  = unique link name
+       ox    = X offset from trolley_base (front +, rear -)
+       oy    = Y offset (left +, right -)
+  ══════════════════════════════════════════════════════════════════════ -->
+  <xacro:macro name="wheel" params="name ox oy">
+
+    <link name="${name}">
+      <!-- Tyre -->
+      <visual>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_t}"/></geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_t}"/></geometry>
+      </collision>
+      <!-- Hub disc (thinner cylinder, slightly smaller radius) -->
+      <visual>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry><cylinder radius="${wheel_r * 0.5}" length="${wheel_t * 1.1}"/></geometry>
+      </visual>
+      <inertial>
+        <mass value="0.8"/>
+        <inertia ixx="0.003" ixy="0" ixz="0"
+                 iyy="0.005" iyz="0"
+                 izz="0.003"/>
+      </inertial>
+    </link>
+
+    <!-- Free-spinning revolute — wheel rolls, no motor -->
+    <joint name="${name}_joint" type="revolute">
+      <parent link="trolley_base"/>
+      <child link="${name}"/>
+      <!-- Wheel centre: below plate by axle_drop, outside plate in Y -->
+      <origin xyz="${ox} ${oy} ${-axle_drop}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1e9" upper="1e9" effort="0" velocity="100"/>
+      <dynamics damping="0.001" friction="0.0"/>
+    </joint>
+
+    <!-- Gazebo surface properties -->
+    <gazebo reference="${name}">
+      <mu1>${mu}</mu1>
+      <mu2>${mu}</mu2>
+      <kp>1000000</kp>
+      <kd>1.0</kd>
+      <minDepth>0.001</minDepth>
+    </gazebo>
+
+  </xacro:macro>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       MACRO: axle bar (visual only) connecting a wheel pair
+       Runs along Y axis between the two wheels of one axle.
+  ══════════════════════════════════════════════════════════════════════ -->
+  <xacro:macro name="axle_bar" params="name ox">
+    <link name="${name}">
+      <visual>
+        <geometry>
+          <box size="${axle_w} ${trolley_w + 2*wheel_t + 0.04} ${axle_w}"/>
+        </geometry>
+      </visual>
+      <inertial>
+        <mass value="0.1"/>
+        <inertia ixx="0.0001" ixy="0" ixz="0"
+                 iyy="0.0001" iyz="0"
+                 izz="0.0001"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="trolley_base"/>
+      <child link="${name}"/>
+      <origin xyz="${ox} 0 ${-axle_drop}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       WORLD + TROLLEY BASE
+  ══════════════════════════════════════════════════════════════════════ -->
   <link name="world"/>
 
-  <link name="rail_link">
-    <visual><geometry><box size="4.0 0.1 0.05"/></geometry></visual>
-    <collision><geometry><box size="4.0 0.1 0.05"/></geometry></collision>
-    <inertial>
-      <mass value="5.0"/>
-      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
-    </inertial>
-  </link>
-
-  <joint name="rail_to_world" type="fixed">
+  <!-- Prismatic joint: trolley slides freely in X (frictionless rail) -->
+  <joint name="trolley_slide" type="prismatic">
     <parent link="world"/>
-    <child link="rail_link"/>
+    <child link="trolley_base"/>
+    <origin xyz="0 0 ${plate_z}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-5.0" upper="5.0" effort="0" velocity="10.0"/>
+    <dynamics damping="0.0" friction="0.0"/>
   </joint>
 
-  <link name="cart_link">
-    <visual><geometry><box size="1.0 0.5 0.05"/></geometry></visual>
-    <collision><geometry><box size="1.0 0.5 0.05"/></geometry></collision>
+  <!-- Trolley base plate -->
+  <link name="trolley_base">
+    <visual>
+      <geometry><box size="${trolley_l} ${trolley_w} ${trolley_h}"/></geometry>
+    </visual>
+    <collision>
+      <geometry><box size="${trolley_l} ${trolley_w} ${trolley_h}"/></geometry>
+    </collision>
     <inertial>
-      <mass value="2.0"/>
-      <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.005" iyz="0" izz="0.005"/>
+      <mass value="6.0"/>
+      <inertia ixx="0.15" ixy="0" ixz="0"
+               iyy="0.3"  iyz="0"
+               izz="0.4"/>
     </inertial>
   </link>
 
-  <joint name="cart_slide" type="prismatic">
-    <parent link="rail_link"/>
-    <child link="cart_link"/>
-    <origin xyz="0 0 0.05" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="-2.0" upper="2.0" effort="0" velocity="5.0"/>
-    <dynamics damping="${cart_damping}" friction="${cart_friction}"/>
-  </joint>
+  <!-- ══════════════════════════════════════════════════════════════════
+       4 WHEELS (front-left, front-right, rear-left, rear-right)
+  ══════════════════════════════════════════════════════════════════════ -->
+  <xacro:wheel name="wheel_fl" ox=" ${wx}" oy=" ${wy}"/>
+  <xacro:wheel name="wheel_fr" ox=" ${wx}" oy="-${wy}"/>
+  <xacro:wheel name="wheel_rl" ox="-${wx}" oy=" ${wy}"/>
+  <xacro:wheel name="wheel_rr" ox="-${wx}" oy="-${wy}"/>
 
+  <!-- ══════════════════════════════════════════════════════════════════
+       2 AXLE BARS (front + rear, visual steel tube connecting each pair)
+  ══════════════════════════════════════════════════════════════════════ -->
+  <xacro:axle_bar name="axle_front" ox=" ${wx}"/>
+  <xacro:axle_bar name="axle_rear"  ox="-${wx}"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       ROBOT — on its side on the trolley plate
+       z offset clears the robot body above the plate surface
+  ══════════════════════════════════════════════════════════════════════ -->
   <joint name="pivot" type="revolute">
-    <parent link="cart_link"/>
+    <parent link="trolley_base"/>
     <child link="base_link"/>
-    <origin xyz="0 0 0.05" rpy="1.5708 0 0"/>
+    <origin xyz="0 0 ${trolley_h/2 + 0.22}" rpy="1.5708 0 0"/>
     <axis xyz="0 1 0"/>
     <limit lower="-3.14" upper="3.14" effort="0" velocity="10.0"/>
-    <dynamics damping="${pivot_damping}" friction="0.0"/>
+    <dynamics damping="0.001" friction="0.0"/>
   </joint>
 
 </robot>
