@@ -1,0 +1,283 @@
+<?xml version="1.0"?>
+<robot name="go2_ladder_crawl" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- ════════════════════════════════════════════════════════════════
+       PARAMETERS
+  ════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Fence-ladder (stands in XZ plane, to the +Y side of trolley) -->
+  <xacro:property name="rail_length"   value="3.0"/>   <!-- ladder length along X -->
+  <xacro:property name="rail_h"        value="0.04"/>  <!-- rail cross-section (square) -->
+  <xacro:property name="ladder_span"   value="0.50"/>  <!-- Z distance between rail centres -->
+  <xacro:property name="rung_r"        value="0.025"/> <!-- rung cylinder radius -->
+  <xacro:property name="rung_space"    value="0.30"/>  <!-- rung centre-to-centre spacing X -->
+  <!-- Y position of the ladder face closest to the robot.
+       Must be reachable by robot legs after rolling 90°.
+       Go2 leg reach in Y ≈ 0.28 m; set ladder face at 0.30 m so feet
+       just touch the rungs when legs are slightly extended. -->
+  <xacro:property name="ladder_y"      value="0.33"/>  <!-- ladder centre Y -->
+
+  <!-- ── Trolley ─────────────────────────────────────────────────── -->
+  <xacro:property name="trolley_l"     value="0.70"/>
+  <xacro:property name="trolley_w"     value="0.50"/>
+  <xacro:property name="trolley_h"     value="0.04"/>
+  <xacro:property name="wheel_r"       value="0.08"/>
+  <xacro:property name="wheel_t"       value="0.05"/>
+  <xacro:property name="axle_drop"     value="${trolley_h/2 + 0.01}"/>
+  <xacro:property name="wx"            value="${trolley_l/2 - 0.08}"/>
+  <xacro:property name="wy"            value="${trolley_w/2 + wheel_t/2 + 0.01}"/>
+  <xacro:property name="plate_z"       value="${wheel_r + axle_drop + trolley_h/2}"/>
+
+  <!-- Rolling resistance (near-zero = microgravity behaviour) -->
+  <xacro:property name="mu"            value="0.005"/>
+
+  <!-- ── Robot mount offset above trolley plate ───────────────────
+       When rolled 90°, robot body half-width in original Y maps to
+       world -Z. 0.22 m clears the Go2 body above the trolley surface;
+       tune up in 0.02 m steps if legs still clip the plate. -->
+  <xacro:property name="robot_z_offset" value="0.22"/>
+
+  <xacro:include filename="$(find unitree_go2_description)/urdf/unitree_go2_robot.xacro"/>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       MACRO: one vertical rung of the fence-ladder
+       Parent: ladder_base
+       x = position along X axis
+       Rung runs along Z (vertical) between the two horizontal rails.
+  ════════════════════════════════════════════════════════════════════ -->
+  <xacro:macro name="rung" params="name x">
+    <link name="${name}">
+      <visual>
+        <!-- cylinder default axis is Z — matches vertical rung -->
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${rung_r}"
+                    length="${ladder_span - rail_h}"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${rung_r}"
+                    length="${ladder_span - rail_h}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.5"/>
+        <inertia ixx="0.001" ixy="0" ixz="0"
+                 iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="ladder_base"/>
+      <child link="${name}"/>
+      <!-- Rung centre: half-way between the two rails in Z -->
+      <origin xyz="${x} 0 ${ladder_span/2}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       MACRO: trolley wheel
+  ════════════════════════════════════════════════════════════════════ -->
+  <xacro:macro name="wheel" params="name ox oy">
+    <link name="${name}">
+      <!-- Tyre -->
+      <visual>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_t}"/></geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry><cylinder radius="${wheel_r}" length="${wheel_t}"/></geometry>
+      </collision>
+      <!-- Hub -->
+      <visual>
+        <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_r*0.45}" length="${wheel_t*1.1}"/>
+        </geometry>
+      </visual>
+      <inertial>
+        <mass value="0.8"/>
+        <inertia ixx="0.003" ixy="0" ixz="0"
+                 iyy="0.005" iyz="0" izz="0.003"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="revolute">
+      <parent link="trolley_base"/>
+      <child link="${name}"/>
+      <origin xyz="${ox} ${oy} ${-axle_drop}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-1e9" upper="1e9" effort="0" velocity="100"/>
+      <dynamics damping="0.001" friction="0.0"/>
+    </joint>
+    <gazebo reference="${name}">
+      <mu1>${mu}</mu1>
+      <mu2>${mu}</mu2>
+      <kp>1000000</kp>
+      <kd>1.0</kd>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       MACRO: axle bar (visual only)
+  ════════════════════════════════════════════════════════════════════ -->
+  <xacro:macro name="axle_bar" params="name ox">
+    <link name="${name}">
+      <visual>
+        <geometry>
+          <box size="0.02 ${trolley_w + 2*wheel_t + 0.04} 0.02"/>
+        </geometry>
+      </visual>
+      <inertial>
+        <mass value="0.05"/>
+        <inertia ixx="0.0001" ixy="0" ixz="0"
+                 iyy="0.0001" iyz="0" izz="0.0001"/>
+      </inertial>
+    </link>
+    <joint name="${name}_joint" type="fixed">
+      <parent link="trolley_base"/>
+      <child link="${name}"/>
+      <origin xyz="${ox} 0 ${-axle_drop}" rpy="0 0 0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       WORLD
+  ════════════════════════════════════════════════════════════════════ -->
+  <link name="world"/>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       FENCE-LADDER
+       Oriented in the XZ plane at y = ladder_y (to the +Y side of trolley).
+       Bottom rail sits on the floor; top rail is ladder_span above it.
+       Vertical rungs connect the two rails.
+  ════════════════════════════════════════════════════════════════════ -->
+  <link name="ladder_base">
+    <inertial>
+      <mass value="0.001"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0"
+               iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+  <joint name="ladder_to_world" type="fixed">
+    <parent link="world"/>
+    <child link="ladder_base"/>
+    <!-- Ladder starts at x = 0 (trolley starts at x = -0.5 before it) -->
+    <origin xyz="${rail_length/2} ${ladder_y} 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Bottom rail (on the floor, runs along X) -->
+  <link name="rail_bottom">
+    <visual>
+      <geometry><box size="${rail_length} ${rail_h} ${rail_h}"/></geometry>
+    </visual>
+    <collision>
+      <geometry><box size="${rail_length} ${rail_h} ${rail_h}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="3.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0"
+               iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+  <joint name="rail_bottom_joint" type="fixed">
+    <parent link="ladder_base"/>
+    <child link="rail_bottom"/>
+    <!-- Centre of bottom rail: z = rail_h/2 (sitting on floor) -->
+    <origin xyz="0 0 ${rail_h/2}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Top rail (elevated, runs along X) -->
+  <link name="rail_top">
+    <visual>
+      <geometry><box size="${rail_length} ${rail_h} ${rail_h}"/></geometry>
+    </visual>
+    <collision>
+      <geometry><box size="${rail_length} ${rail_h} ${rail_h}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="3.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0"
+               iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+  <joint name="rail_top_joint" type="fixed">
+    <parent link="ladder_base"/>
+    <child link="rail_top"/>
+    <!-- Centre of top rail at z = ladder_span -->
+    <origin xyz="0 0 ${ladder_span}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 10 vertical rungs at 0.30 m intervals -->
+  <xacro:rung name="rung_01" x="${-rail_length/2 + 0.15}"/>
+  <xacro:rung name="rung_02" x="${-rail_length/2 + 0.45}"/>
+  <xacro:rung name="rung_03" x="${-rail_length/2 + 0.75}"/>
+  <xacro:rung name="rung_04" x="${-rail_length/2 + 1.05}"/>
+  <xacro:rung name="rung_05" x="${-rail_length/2 + 1.35}"/>
+  <xacro:rung name="rung_06" x="${-rail_length/2 + 1.65}"/>
+  <xacro:rung name="rung_07" x="${-rail_length/2 + 1.95}"/>
+  <xacro:rung name="rung_08" x="${-rail_length/2 + 2.25}"/>
+  <xacro:rung name="rung_09" x="${-rail_length/2 + 2.55}"/>
+  <xacro:rung name="rung_10" x="${-rail_length/2 + 2.85}"/>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       TROLLEY
+       Slides in X (frictionless prismatic joint to world).
+       Starts at x = -0.5 (just before the ladder entrance).
+       Centred on Y = 0 so robot legs on +Y side face the ladder.
+  ════════════════════════════════════════════════════════════════════ -->
+  <joint name="trolley_slide" type="prismatic">
+    <parent link="world"/>
+    <child link="trolley_base"/>
+    <origin xyz="-0.5 0 ${plate_z}" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.0" upper="${rail_length + 0.5}"
+           effort="0" velocity="10.0"/>
+    <dynamics damping="0.0" friction="0.0"/>
+  </joint>
+
+  <link name="trolley_base">
+    <visual>
+      <geometry>
+        <box size="${trolley_l} ${trolley_w} ${trolley_h}"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${trolley_l} ${trolley_w} ${trolley_h}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="6.0"/>
+      <inertia ixx="0.15" ixy="0" ixz="0"
+               iyy="0.30" iyz="0" izz="0.40"/>
+    </inertial>
+  </link>
+
+  <!-- 4 wheels -->
+  <xacro:wheel name="whl_fl" ox=" ${wx}" oy=" ${wy}"/>
+  <xacro:wheel name="whl_fr" ox=" ${wx}" oy="-${wy}"/>
+  <xacro:wheel name="whl_rl" ox="-${wx}" oy=" ${wy}"/>
+  <xacro:wheel name="whl_rr" ox="-${wx}" oy="-${wy}"/>
+
+  <!-- 2 axle bars -->
+  <xacro:axle_bar name="axle_f" ox=" ${wx}"/>
+  <xacro:axle_bar name="axle_r" ox="-${wx}"/>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       ROBOT — on its side, FIXED to trolley (no floating pivot).
+       rpy="1.5708 0 0": 90° roll so robot lies sideways.
+       After rolling, legs extend in world +Y toward the fence-ladder.
+       z offset clears the robot body above the trolley plate surface.
+       The fixed joint means robot and trolley move as one unit —
+       leg contact forces on rungs directly propel the trolley in X.
+  ════════════════════════════════════════════════════════════════════ -->
+  <joint name="robot_to_trolley" type="fixed">
+    <parent link="trolley_base"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${trolley_h/2 + robot_z_offset}"
+            rpy="1.5708 0 0"/>
+  </joint>
+
+</robot>
