@@ -1,0 +1,247 @@
+<mujoco model="go2_real_ladder_crawl">
+  <compiler angle="radian" meshdir="/home/student22/mujoco_menagerie/unitree_go2/assets" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -0.001"
+          solver="Newton" iterations="100" tolerance="1e-10" impratio="10"/>
+  <default>
+    <default class="go2">
+      <geom friction="0.6" margin="0.001" condim="1" />
+      <joint axis="0 1 0" damping="2" armature="0.01" frictionloss="0.2" />
+      <motor ctrlrange="-23.7 23.7" />
+      <default class="abduction">
+        <joint axis="1 0 0" range="-1.0472 1.0472" />
+      </default>
+      <default class="hip">
+        <default class="front_hip">
+          <joint range="-1.5708 3.4907" />
+        </default>
+        <default class="back_hip">
+          <joint range="-0.5236 4.5379" />
+        </default>
+      </default>
+      <default class="knee">
+        <joint range="-2.7227 -0.83776" />
+        <motor ctrlrange="-45.43 45.43" />
+      </default>
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2" />
+      </default>
+      <default class="collision">
+        <geom group="3" />
+        <default class="foot">
+          <geom size="0.022" pos="-0.002 0 -0.213" priority="1" solimp="0.015 1 0.022" condim="6" friction="0.8 0.02 0.01" />
+        </default>
+      </default>
+    </default>
+  </default>
+
+  
+  <asset>
+    <material name="metal" rgba=".9 .95 .95 1" />
+    <material name="black" rgba="0 0 0 1" />
+    <material name="white" rgba="1 1 1 1" />
+    <material name="gray" rgba="0.671705 0.692426 0.774270 1" />
+
+    <mesh file="base_0.obj" />
+    <mesh file="base_1.obj" />
+    <mesh file="base_2.obj" />
+    <mesh file="base_3.obj" />
+    <mesh file="base_4.obj" />
+    <mesh file="hip_0.obj" />
+    <mesh file="hip_1.obj" />
+    <mesh file="thigh_0.obj" />
+    <mesh file="thigh_1.obj" />
+    <mesh file="thigh_mirror_0.obj" />
+    <mesh file="thigh_mirror_1.obj" />
+    <mesh file="calf_0.obj" />
+    <mesh file="calf_1.obj" />
+    <mesh file="calf_mirror_0.obj" />
+    <mesh file="calf_mirror_1.obj" />
+    <mesh file="foot.obj" />
+  </asset>
+
+  
+  
+  <worldbody>
+    <light pos="0 0 4" dir="0 0 -1" diffuse="0.9 0.9 0.9"/>
+    <geom name="floor" type="plane" size="10 10 0.1"
+          rgba="0.80 0.80 0.80 1" friction="0.005 0.001 0.001"/>
+
+    <body name="ladder" pos="1.619 0.3 0">
+      <geom type="box" size="1.5 0.007 0.007" pos="0 0 0.007"
+            rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
+      <geom type="box" size="1.5 0.007 0.007" pos="0 0 0.893"
+            rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
+      <geom name="rung_01" type="box" size="0.028 0.028 0.440" pos="-1.05 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_02" type="box" size="0.028 0.028 0.440" pos="-0.75 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_03" type="box" size="0.028 0.028 0.440" pos="-0.45 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_04" type="box" size="0.028 0.028 0.440" pos="-0.15 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_05" type="box" size="0.028 0.028 0.440" pos=" 0.15 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_06" type="box" size="0.028 0.028 0.440" pos=" 0.45 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_07" type="box" size="0.028 0.028 0.440" pos=" 0.75 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_08" type="box" size="0.028 0.028 0.440" pos=" 1.05 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+    </body>
+
+    <!-- FIX: trolley now actually has a joint! Previously this body had no
+         joint element at all, which rigidly welds it to the world in MuJoCo
+         -- it could never move, no matter what crawl.py did. Axis is X
+         because the rungs are spaced along local/world X inside "ladder". -->
+    <body name="trolley" pos="0 0 0.12">
+      <joint name="trolley_slide" type="slide" axis="1 0 0" damping="0.5" limited="false"/>
+      <geom type="box" size="0.35 0.25 0.02" rgba="0.22 0.22 0.22 1" mass="5.0"/>
+      <body name="wfl" pos=" 0.27  0.26 -0.10"><joint name="wfl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
+      <body name="wfr" pos=" 0.27 -0.26 -0.10"><joint name="wfr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
+      <body name="wrl" pos="-0.27  0.26 -0.10"><joint name="wrl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
+      <body name="wrr" pos="-0.27 -0.26 -0.10"><joint name="wrr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
+      <body name="base" pos="0 0 0.19" childclass="go2" euler="1.5708 0 0">
+      <inertial pos="0.021112 0 -0.005366" quat="-0.000543471 0.713435 -0.00173769 0.700719" mass="6.921" diaginertia="0.107027 0.0980771 0.0244531" />
+      <geom mesh="base_0" material="black" class="visual" />
+      <geom mesh="base_1" material="black" class="visual" />
+      <geom mesh="base_2" material="black" class="visual" />
+      <geom mesh="base_3" material="white" class="visual" />
+      <geom mesh="base_4" material="gray" class="visual" />
+      <geom size="0.1881 0.04675 0.057" type="box" class="collision" />
+      <geom size="0.05 0.045" pos="0.285 0 0.01" type="cylinder" class="collision" />
+      <geom size="0.047" pos="0.293 0 -0.06" class="collision" />
+      <site name="imu" pos="-0.02557 0 0.04232" />
+      <body name="FL_hip" pos="0.1934 0.0465 0">
+        <inertial pos="-0.0054 0.00194 -0.000105" quat="0.497014 0.499245 0.505462 0.498237" mass="0.678" diaginertia="0.00088403 0.000596003 0.000479967" />
+        <joint name="FL_hip_joint" class="abduction" />
+        <geom mesh="hip_0" material="metal" class="visual" />
+        <geom mesh="hip_1" material="gray" class="visual" />
+        <geom size="0.046 0.02" pos="0 0.08 0" quat="1 1 0 0" type="cylinder" class="collision" />
+        <body name="FL_thigh" pos="0 0.0955 0">
+          <inertial pos="-0.00374 -0.0223 -0.0327" quat="0.829533 0.0847635 -0.0200632 0.551623" mass="1.152" diaginertia="0.00594973 0.00584149 0.000878787" />
+          <joint name="FL_thigh_joint" class="front_hip" />
+          <geom mesh="thigh_0" material="metal" class="visual" />
+          <geom mesh="thigh_1" material="gray" class="visual" />
+          <geom size="0.1065 0.01225 0.017" pos="0 0 -0.1065" quat="0.707107 0 0.707107 0" type="box" class="collision" />
+          <body name="FL_calf" pos="0 0 -0.213">
+            <inertial pos="0.00629595 -0.000622121 -0.141417" quat="0.710672 0.00154099 -0.00450087 0.703508" mass="0.241352" diaginertia="0.0014901 0.00146356 5.31397e-05" />
+            <joint name="FL_calf_joint" class="knee" />
+            <geom mesh="calf_0" material="gray" class="visual" />
+            <geom mesh="calf_1" material="black" class="visual" />
+            <geom size="0.012 0.06" pos="0.008 0 -0.06" quat="0.994493 0 -0.104807 0" type="cylinder" class="collision" />
+            <geom size="0.011 0.0325" pos="0.02 0 -0.148" quat="0.999688 0 0.0249974 0" type="cylinder" class="collision" />
+            <geom pos="0 0 -0.213" mesh="foot" class="visual" material="black" />
+            <geom name="FL" class="foot" />
+          <body name="gc_palm" pos="0 0 -0.213"><site name="gc_grip_site" pos="0 0 0" size="0.006" rgba="1 0 0 1" /><geom type="box" size="0.055 0.015 0.015" pos="0 0 -0.015" rgba="0.08 0.08 0.08 1" mass="0.001" contype="0" conaffinity="0" /><body name="gc_lp" pos="-0.040 0 -0.02"><joint name="gc_lp_joint" type="hinge" axis="0 1 0" range="0 1.2217" damping="2.0" armature="0.001" /><geom type="box" size="0.010 0.009 0.120" pos="0 0 -0.060" rgba="0.2 0.2 0.2 1" mass="0.001" contype="0" conaffinity="0" /><body name="gc_ld" pos="0 0 -0.120"><geom type="box" size="0.009 0.007 0.090" pos="0 0 -0.045" rgba="0.1 0.1 0.1 1" mass="0.001" contype="0" conaffinity="0" /></body></body><body name="gc_rp" pos="0.040 0 -0.02"><joint name="gc_rp_joint" type="hinge" axis="0 -1 0" range="0 1.2217" damping="2.0" armature="0.001" /><geom type="box" size="0.010 0.009 0.120" pos="0 0 -0.060" rgba="0.2 0.2 0.2 1" mass="0.001" contype="0" conaffinity="0" /><body name="gc_rd" pos="0 0 -0.120"><geom type="box" size="0.009 0.007 0.090" pos="0 0 -0.045" rgba="0.1 0.1 0.1 1" mass="0.001" contype="0" conaffinity="0" /></body></body></body></body>
+        </body>
+      </body>
+      <body name="FR_hip" pos="0.1934 -0.0465 0">
+        <inertial pos="-0.0054 -0.00194 -0.000105" quat="0.498237 0.505462 0.499245 0.497014" mass="0.678" diaginertia="0.00088403 0.000596003 0.000479967" />
+        <joint name="FR_hip_joint" class="abduction" />
+        <geom mesh="hip_0" material="metal" class="visual" quat="4.63268e-05 1 0 0" />
+        <geom mesh="hip_1" material="gray" class="visual" quat="4.63268e-05 1 0 0" />
+        <geom size="0.046 0.02" pos="0 -0.08 0" quat="0.707107 0.707107 0 0" type="cylinder" class="collision" />
+        <body name="FR_thigh" pos="0 -0.0955 0">
+          <inertial pos="-0.00374 0.0223 -0.0327" quat="0.551623 -0.0200632 0.0847635 0.829533" mass="1.152" diaginertia="0.00594973 0.00584149 0.000878787" />
+          <joint name="FR_thigh_joint" class="front_hip" />
+          <geom mesh="thigh_mirror_0" material="metal" class="visual" />
+          <geom mesh="thigh_mirror_1" material="gray" class="visual" />
+          <geom size="0.1065 0.01225 0.017" pos="0 0 -0.1065" quat="0.707107 0 0.707107 0" type="box" class="collision" />
+          <body name="FR_calf" pos="0 0 -0.213">
+            <inertial pos="0.00629595 0.000622121 -0.141417" quat="0.703508 -0.00450087 0.00154099 0.710672" mass="0.241352" diaginertia="0.0014901 0.00146356 5.31397e-05" />
+            <joint name="FR_calf_joint" class="knee" />
+            <geom mesh="calf_mirror_0" material="gray" class="visual" />
+            <geom mesh="calf_mirror_1" material="black" class="visual" />
+            <geom size="0.013 0.06" pos="0.01 0 -0.06" quat="0.995004 0 -0.0998334 0" type="cylinder" class="collision" />
+            <geom size="0.011 0.0325" pos="0.02 0 -0.148" quat="0.999688 0 0.0249974 0" type="cylinder" class="collision" />
+            <geom pos="0 0 -0.213" mesh="foot" class="visual" material="black" />
+            <geom name="FR" class="foot" />
+          </body>
+        </body>
+      </body>
+      <body name="RL_hip" pos="-0.1934 0.0465 0">
+        <inertial pos="0.0054 0.00194 -0.000105" quat="0.505462 0.498237 0.497014 0.499245" mass="0.678" diaginertia="0.00088403 0.000596003 0.000479967" />
+        <joint name="RL_hip_joint" class="abduction" />
+        <geom mesh="hip_0" material="metal" class="visual" quat="4.63268e-05 0 1 0" />
+        <geom mesh="hip_1" material="gray" class="visual" quat="4.63268e-05 0 1 0" />
+        <geom size="0.046 0.02" pos="0 0.08 0" quat="0.707107 0.707107 0 0" type="cylinder" class="collision" />
+        <body name="RL_thigh" pos="0 0.0955 0">
+          <inertial pos="-0.00374 -0.0223 -0.0327" quat="0.829533 0.0847635 -0.0200632 0.551623" mass="1.152" diaginertia="0.00594973 0.00584149 0.000878787" />
+          <joint name="RL_thigh_joint" class="back_hip" />
+          <geom mesh="thigh_0" material="metal" class="visual" />
+          <geom mesh="thigh_1" material="gray" class="visual" />
+          <geom size="0.1065 0.01225 0.017" pos="0 0 -0.1065" quat="0.707107 0 0.707107 0" type="box" class="collision" />
+          <body name="RL_calf" pos="0 0 -0.213">
+            <inertial pos="0.00629595 -0.000622121 -0.141417" quat="0.710672 0.00154099 -0.00450087 0.703508" mass="0.241352" diaginertia="0.0014901 0.00146356 5.31397e-05" />
+            <joint name="RL_calf_joint" class="knee" />
+            <geom mesh="calf_0" material="gray" class="visual" />
+            <geom mesh="calf_1" material="black" class="visual" />
+            <geom size="0.013 0.06" pos="0.01 0 -0.06" quat="0.995004 0 -0.0998334 0" type="cylinder" class="collision" />
+            <geom size="0.011 0.0325" pos="0.02 0 -0.148" quat="0.999688 0 0.0249974 0" type="cylinder" class="collision" />
+            <geom pos="0 0 -0.213" mesh="foot" class="visual" material="black" />
+            <geom name="RL" class="foot" />
+          </body>
+        </body>
+      </body>
+      <body name="RR_hip" pos="-0.1934 -0.0465 0">
+        <inertial pos="0.0054 -0.00194 -0.000105" quat="0.499245 0.497014 0.498237 0.505462" mass="0.678" diaginertia="0.00088403 0.000596003 0.000479967" />
+        <joint name="RR_hip_joint" class="abduction" />
+        <geom mesh="hip_0" material="metal" class="visual" quat="2.14617e-09 4.63268e-05 4.63268e-05 -1" />
+        <geom mesh="hip_1" material="gray" class="visual" quat="2.14617e-09 4.63268e-05 4.63268e-05 -1" />
+        <geom size="0.046 0.02" pos="0 -0.08 0" quat="0.707107 0.707107 0 0" type="cylinder" class="collision" />
+        <body name="RR_thigh" pos="0 -0.0955 0">
+          <inertial pos="-0.00374 0.0223 -0.0327" quat="0.551623 -0.0200632 0.0847635 0.829533" mass="1.152" diaginertia="0.00594973 0.00584149 0.000878787" />
+          <joint name="RR_thigh_joint" class="back_hip" />
+          <geom mesh="thigh_mirror_0" material="metal" class="visual" />
+          <geom mesh="thigh_mirror_1" material="gray" class="visual" />
+          <geom size="0.1065 0.01225 0.017" pos="0 0 -0.1065" quat="0.707107 0 0.707107 0" type="box" class="collision" />
+          <body name="RR_calf" pos="0 0 -0.213">
+            <inertial pos="0.00629595 0.000622121 -0.141417" quat="0.703508 -0.00450087 0.00154099 0.710672" mass="0.241352" diaginertia="0.0014901 0.00146356 5.31397e-05" />
+            <joint name="RR_calf_joint" class="knee" />
+            <geom mesh="calf_mirror_0" material="gray" class="visual" />
+            <geom mesh="calf_mirror_1" material="black" class="visual" />
+            <geom size="0.013 0.06" pos="0.01 0 -0.06" quat="0.995004 0 -0.0998334 0" type="cylinder" class="collision" />
+            <geom size="0.011 0.0325" pos="0.02 0 -0.148" quat="0.999688 0 0.0249974 0" type="cylinder" class="collision" />
+            <geom pos="0 0 -0.213" mesh="foot" class="visual" material="black" />
+            <geom name="RR" class="foot" />
+          </body>
+        </body>
+      </body>
+    </body>
+  
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor class="abduction" name="FL_hip" joint="FL_hip_joint" />
+    <motor class="hip" name="FL_thigh" joint="FL_thigh_joint" />
+    <motor class="knee" name="FL_calf" joint="FL_calf_joint" />
+    <motor class="abduction" name="FR_hip" joint="FR_hip_joint" />
+    <motor class="hip" name="FR_thigh" joint="FR_thigh_joint" />
+    <motor class="knee" name="FR_calf" joint="FR_calf_joint" />
+    <motor class="abduction" name="RL_hip" joint="RL_hip_joint" />
+    <motor class="hip" name="RL_thigh" joint="RL_thigh_joint" />
+    <motor class="knee" name="RL_calf" joint="RL_calf_joint" />
+    <motor class="abduction" name="RR_hip" joint="RR_hip_joint" />
+    <motor class="hip" name="RR_thigh" joint="RR_thigh_joint" />
+    <motor class="knee" name="RR_calf" joint="RR_calf_joint" />
+    <position name="gc_lp" joint="gc_lp_joint" kp="30" kv="3" ctrlrange="0 1.2217"/>
+  <position name="gc_rp" joint="gc_rp_joint" kp="30" kv="3" ctrlrange="0 1.2217"/>
+</actuator>
+
+  
+
+  <!-- FIX: was <weld body1="FL_calf" body2="ladder" .../>. A weld/connect's
+       anchor points are baked in at COMPILE time from qpos0 -- activating it
+       later does NOT grab "wherever the gripper currently is", it snaps
+       toward whatever relative pose existed when this file was built. That's
+       why the grip never held. The real fix has to happen at runtime (see
+       crawl.py's grasp()/release()), which recomputes eq_data every time it
+       grabs. Also switched weld -> connect (ball joint) so the wrist/leg can
+       still rotate around the grip point while the leg swings -- a weld
+       would rigidly lock orientation too and fight the swing motion.
+       body1 changed from FL_calf to gc_palm so the anchor is the actual
+       fingertip, not an arbitrary point on the calf. -->
+  <equality>
+    <connect name="fl_grip" body1="gc_palm" body2="ladder"
+             anchor="0 0 0" active="false" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </equality>
+
+  <sensor>
+    <jointpos name="trolley_x"   joint="trolley_slide"/>
+    <framepos name="fl_calf_pos" objtype="body" objname="FL_calf"/>
+    <framepos name="gc_palm_pos" objtype="site" objname="gc_grip_site"/>
+  </sensor>
+</mujoco>
