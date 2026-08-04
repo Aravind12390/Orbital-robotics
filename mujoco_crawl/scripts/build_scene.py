@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
+import re
 import xml.etree.ElementTree as ET
 import mujoco
 
-MENAGERIE = '/home/student22/mujoco_menagerie/unitree_go2'
-GO2_XML   = f'{MENAGERIE}/go2.xml'
-ASSETS    = f'{MENAGERIE}/assets'
-OUT       = '/home/student22/mujoco_crawl/models/go2_real_scene.xml'
+MENAGERIE_ROOT = '/home/student22/mujoco_menagerie'
+MENAGERIE      = f'{MENAGERIE_ROOT}/unitree_go2'
+GO2_XML        = f'{MENAGERIE}/go2.xml'
+ASSETS         = f'{MENAGERIE}/assets'
+OUT            = '/home/student22/mujoco_crawl/models/go2_real_scene.xml'
+
+GRIPPER_XML    = f'{MENAGERIE_ROOT}/robotiq_2f85/2f85.xml'
+GRIPPER_ASSETS = f'{MENAGERIE_ROOT}/robotiq_2f85/assets'
 
 # From diagnostic: gc_lp pivot at (0.565, 0.300, 0.410)
 # rung_01 world X = LADDER_X - 1.05  ->  set = 0.569  ->  LADDER_X = 1.619
@@ -13,17 +18,18 @@ OUT       = '/home/student22/mujoco_crawl/models/go2_real_scene.xml'
 LADDER_X = 1.619
 LADDER_Y = 0.300
 
+# ============================== Go2 body =====================================
 tree = ET.parse(GO2_XML)
 root = tree.getroot()
 
-def get_block(tag):
-    el = root.find(tag)
-    return ET.tostring(el, encoding='unicode') if el is not None else ''
+def get_block(el_root, tag):
+    el = el_root.find(tag)
+    return el
 
-default_str = get_block('default')
-asset_str   = get_block('asset')
-act_str     = get_block('actuator')
-contact_str = get_block('contact')
+default_el = get_block(root, 'default')
+asset_el   = get_block(root, 'asset')
+act_el     = get_block(root, 'actuator')
+contact_el = get_block(root, 'contact')
 
 worldbody = root.find('worldbody')
 robot = [b for b in worldbody if b.tag == 'body'][0]
@@ -45,61 +51,132 @@ def find_body(el, name):
 fl_calf = find_body(robot, 'FL_calf')
 print(f'FL_calf found: {fl_calf is not None}')
 
-# IMPORTANT: contype="0" conaffinity="0" on ALL gripper geoms
-# -> purely visual, zero collision, zero explosion risk
-# The equality constraint handles the actual grip physics.
-#
-# FIX: added <site name="gc_grip_site"/> on gc_palm -- this is the point
-# IK/grasp code targets and anchors to, instead of guessing an offset from
-# FL_calf's own origin.
-gripper_xml = (
-    '<body name="gc_palm" pos="0 0 -0.213">'
-    '<site name="gc_grip_site" pos="0 0 0" size="0.006" rgba="1 0 0 1"/>'
-    '<geom type="box" size="0.055 0.015 0.015" pos="0 0 -0.015"'
-    ' rgba="0.08 0.08 0.08 1" mass="0.001"'
-    ' contype="0" conaffinity="0"/>'
+# ==================== Robotiq 2F-85 gripper (real hardware model) ============
+# We attach the actual Robotiq 2F-85 from mujoco_menagerie instead of a
+# hand-built placeholder gripper. Its default classes, materials, and one
+# body name ("base") collide with go2's own names, so everything gets
+# namespaced with a "g2f_" prefix before merging. Mesh files are pointed at
+# via absolute paths so we don't have to touch the student's menagerie clone.
+with open(GRIPPER_XML) as f:
+    grip_raw = f.read()
 
-    '<body name="gc_lp" pos="-0.040 0 -0.02">'
-    '<joint name="gc_lp_joint" type="hinge" axis="0 1 0"'
-    ' range="0 1.2217" damping="2.0" armature="0.001"/>'
-    '<geom type="box" size="0.010 0.009 0.120" pos="0 0 -0.060"'
-    ' rgba="0.2 0.2 0.2 1" mass="0.001"'
-    ' contype="0" conaffinity="0"/>'
-    '<body name="gc_ld" pos="0 0 -0.120">'
-    '<geom type="box" size="0.009 0.007 0.090" pos="0 0 -0.045"'
-    ' rgba="0.1 0.1 0.1 1" mass="0.001"'
-    ' contype="0" conaffinity="0"/>'
-    '</body></body>'
+_CLASS_TOKENS = ['2f85', 'driver', 'follower', 'spring_link', 'coupler',
+                  'visual', 'collision', 'pad_box1', 'pad_box2']
+for tok in _CLASS_TOKENS:
+    grip_raw = re.sub(rf'(class|childclass)="{tok}"', rf'\1="g2f_{tok}"', grip_raw)
 
-    '<body name="gc_rp" pos="0.040 0 -0.02">'
-    '<joint name="gc_rp_joint" type="hinge" axis="0 -1 0"'
-    ' range="0 1.2217" damping="2.0" armature="0.001"/>'
-    '<geom type="box" size="0.010 0.009 0.120" pos="0 0 -0.060"'
-    ' rgba="0.2 0.2 0.2 1" mass="0.001"'
-    ' contype="0" conaffinity="0"/>'
-    '<body name="gc_rd" pos="0 0 -0.120">'
-    '<geom type="box" size="0.009 0.007 0.090" pos="0 0 -0.045"'
-    ' rgba="0.1 0.1 0.1 1" mass="0.001"'
-    ' contype="0" conaffinity="0"/>'
-    '</body></body>'
-    '</body>'
-)
+_MATERIAL_TOKENS = ['metal', 'black', 'gray', 'silicone']
+for tok in _MATERIAL_TOKENS:
+    grip_raw = re.sub(rf'<material name="{tok}"', f'<material name="g2f_{tok}"', grip_raw)
+    grip_raw = re.sub(rf'material="{tok}"', f'material="g2f_{tok}"', grip_raw)
 
-fl_calf.append(ET.fromstring(gripper_xml))
+# "base" collides with go2's own root body -> rename to "gripper_base"
+# everywhere it's used as a body name or an exclude/equality reference.
+grip_raw = grip_raw.replace('<body name="base" ', '<body name="gripper_base" ')
+grip_raw = re.sub(r'(body1|body2)="base"', r'\1="gripper_base"', grip_raw)
+
+# Meshes: point at absolute paths in the gripper's own assets/ folder so we
+# don't need a second <compiler meshdir=.../> or to copy files anywhere.
+grip_raw = re.sub(r'file="([^"]+\.stl)"', rf'file="{GRIPPER_ASSETS}/\1"', grip_raw)
+
+grip_root = ET.fromstring(grip_raw)
+
+grip_default_el  = grip_root.find('default')
+grip_asset_el    = grip_root.find('asset')
+grip_tendon_el   = grip_root.find('tendon')
+grip_equality_el = grip_root.find('equality')
+grip_actuator_el = grip_root.find('actuator')
+grip_contact_el  = grip_root.find('contact')
+
+grip_worldbody = grip_root.find('worldbody')
+gripper_body = [b for b in grip_worldbody if b.tag == 'body'][0]  # "base_mount"
+
+# Attach at the FL foot location (same offset the old custom gripper used).
+# Orientation found by empirical search over candidate mounting quaternions
+# (identity/90/180 about each axis), checking which one lets the gripper's
+# built-in "pinch" site actually reach the calibrated rung target via IK.
+# quat="0 1 0 0" (180 deg about X) was the only clean solution: 0 residual
+# error, all three joint angles comfortably inside their limits.
+gripper_body.set('pos', '0 0 -0.213')
+gripper_body.set('quat', '0 1 0 0')
+
+fl_calf.append(gripper_body)
 robot_str = ET.tostring(robot, encoding='unicode')
 
-act_str = act_str.replace(
-    '</actuator>',
-    '  <position name="gc_lp" joint="gc_lp_joint" kp="30" kv="3" ctrlrange="0 1.2217"/>\n'
-    '  <position name="gc_rp" joint="gc_rp_joint" kp="30" kv="3" ctrlrange="0 1.2217"/>\n'
-    '</actuator>'
-)
+# ---- merge <default>: go2's is <default><default class="go2">...</default></default>,
+#      2f85's is the same shape with class="g2f_2f85" -- merge the two named
+#      children under one bare wrapper.
+combined_default = ET.Element('default')
+for child in list(default_el):
+    combined_default.append(child)
+for child in list(grip_default_el):
+    combined_default.append(child)
+default_str = ET.tostring(combined_default, encoding='unicode')
+
+# ---- merge <asset>
+combined_asset = ET.Element('asset')
+for child in list(asset_el):
+    combined_asset.append(child)
+for child in list(grip_asset_el):
+    combined_asset.append(child)
+asset_str = ET.tostring(combined_asset, encoding='unicode')
+
+# ---- merge <contact>: go2's self-collision excludes + 2f85's own +
+#      new excludes so the newly-attached gripper doesn't produce "ghost"
+#      contacts against the leg it's mounted on or the trolley deck as it
+#      swings. Previously only gripper_base/base_mount were excluded --
+#      the finger linkage itself (driver/coupler/spring_link/follower/pad,
+#      left AND right) was NOT, and those parts sweep much closer to
+#      FL_thigh/FL_calf and the trolley chassis during the pull/swing
+#      motion, which is what was producing spurious contact forces.
+def _collect_body_names(body_el):
+    names = [body_el.get('name')]
+    for ch in body_el.findall('body'):
+        names.extend(_collect_body_names(ch))
+    return names
+
+gripper_body_names = _collect_body_names(gripper_body)  # all 14 bodies, both fingers
+
+combined_contact = ET.Element('contact')
+if contact_el is not None:
+    for child in list(contact_el):
+        combined_contact.append(child)
+if grip_contact_el is not None:
+    for child in list(grip_contact_el):
+        combined_contact.append(child)
+for other in ('FL_hip', 'FL_thigh', 'FL_calf', 'trolley'):
+    for gname in gripper_body_names:
+        ET.SubElement(combined_contact, 'exclude', {'body1': other, 'body2': gname})
+contact_str = ET.tostring(combined_contact, encoding='unicode')
+
+# ---- actuators: go2's own leg motors + the gripper's single tendon-driven
+#      finger actuator (replaces the old hand-built gc_lp/gc_rp actuators)
+combined_actuator = ET.Element('actuator')
+for child in list(act_el):
+    combined_actuator.append(child)
+for child in list(grip_actuator_el):
+    combined_actuator.append(child)
+act_str = ET.tostring(combined_actuator, encoding='unicode')
+
+# ---- tendon: only the gripper defines one (couples its two finger joints)
+tendon_str = ET.tostring(grip_tendon_el, encoding='unicode')
+
+# ---- equality: gripper's own finger-coupling constraints + our rung-grasp
+#      connect (anchors computed and written at runtime by crawl.py)
+combined_equality = ET.Element('equality')
+for child in list(grip_equality_el):
+    combined_equality.append(child)
+ET.SubElement(combined_equality, 'connect', {
+    'name': 'fl_grip', 'body1': 'gripper_base', 'body2': 'ladder',
+    'anchor': '0 0 0', 'active': 'false', 'solref': '0.01 1', 'solimp': '0.9 0.95 0.001',
+})
+equality_str = ET.tostring(combined_equality, encoding='unicode')
 
 r = 0.028
 
 scene = f"""<mujoco model="go2_real_ladder_crawl">
   <compiler angle="radian" meshdir="{ASSETS}" autolimits="true"/>
-  <option timestep="0.002" gravity="0 0 -0.001"
+  <option timestep="0.002" gravity="0 0 -0.981" cone="elliptic"
           solver="Newton" iterations="100" tolerance="1e-10" impratio="10"/>
   {default_str}
   {asset_str}
@@ -114,53 +191,42 @@ scene = f"""<mujoco model="go2_real_ladder_crawl">
             rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
       <geom type="box" size="1.5 0.007 0.007" pos="0 0 0.893"
             rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
-      <geom name="rung_01" type="box" size="{r} {r} 0.440" pos="-1.05 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_02" type="box" size="{r} {r} 0.440" pos="-0.75 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_03" type="box" size="{r} {r} 0.440" pos="-0.45 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_04" type="box" size="{r} {r} 0.440" pos="-0.15 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_05" type="box" size="{r} {r} 0.440" pos=" 0.15 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_06" type="box" size="{r} {r} 0.440" pos=" 0.45 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_07" type="box" size="{r} {r} 0.440" pos=" 0.75 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_08" type="box" size="{r} {r} 0.440" pos=" 1.05 0 0.42" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_01" type="box" size="{r} {r} 0.436" pos="-1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_02" type="box" size="{r} {r} 0.436" pos="-0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_03" type="box" size="{r} {r} 0.436" pos="-0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_04" type="box" size="{r} {r} 0.436" pos="-0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_05" type="box" size="{r} {r} 0.436" pos=" 0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_06" type="box" size="{r} {r} 0.436" pos=" 0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_07" type="box" size="{r} {r} 0.436" pos=" 0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_08" type="box" size="{r} {r} 0.436" pos=" 1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
     </body>
 
-    <!-- FIX: trolley now actually has a joint! Previously this body had no
-         joint element at all, which rigidly welds it to the world in MuJoCo
-         -- it could never move, no matter what crawl.py did. Axis is X
-         because the rungs are spaced along local/world X inside "ladder". -->
     <body name="trolley" pos="0 0 0.12">
       <joint name="trolley_slide" type="slide" axis="1 0 0" damping="0.5" limited="false"/>
       <geom type="box" size="0.35 0.25 0.02" rgba="0.22 0.22 0.22 1" mass="5.0"/>
-      <body name="wfl" pos=" 0.27  0.26 -0.10"><joint name="wfl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
-      <body name="wfr" pos=" 0.27 -0.26 -0.10"><joint name="wfr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
-      <body name="wrl" pos="-0.27  0.26 -0.10"><joint name="wrl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
-      <body name="wrr" pos="-0.27 -0.26 -0.10"><joint name="wrr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.001 0.001 0.001"/></body>
+      <body name="wfl" pos=" 0.27  0.26 -0.10"><joint name="wfl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.005 0.001 0.001"/></body>
+      <body name="wfr" pos=" 0.27 -0.26 -0.10"><joint name="wfr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.005 0.001 0.001"/></body>
+      <body name="wrl" pos="-0.27  0.26 -0.10"><joint name="wrl_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.005 0.001 0.001"/></body>
+      <body name="wrr" pos="-0.27 -0.26 -0.10"><joint name="wrr_j" type="hinge" axis="0 1 0" damping="0.001" limited="false"/><geom type="cylinder" size="0.08 0.025" euler="1.5708 0 0" mass="0.5" rgba="0.10 0.10 0.10 1" friction="0.005 0.001 0.001"/></body>
       {robot_str}
     </body>
   </worldbody>
 
   {act_str}
 
-  <!-- FIX: was <weld body1="FL_calf" body2="ladder" .../>. A weld/connect's
-       anchor points are baked in at COMPILE time from qpos0 -- activating it
-       later does NOT grab "wherever the gripper currently is", it snaps
-       toward whatever relative pose existed when this file was built. That's
-       why the grip never held. The real fix has to happen at runtime (see
-       crawl.py's grasp()/release()), which recomputes eq_data every time it
-       grabs. Also switched weld -> connect (ball joint) so the wrist/leg can
-       still rotate around the grip point while the leg swings -- a weld
-       would rigidly lock orientation too and fight the swing motion.
-       body1 changed from FL_calf to gc_palm so the anchor is the actual
-       fingertip, not an arbitrary point on the calf. -->
-  <equality>
-    <connect name="fl_grip" body1="gc_palm" body2="ladder"
-             anchor="0 0 0" active="false" solref="0.01 1" solimp="0.9 0.95 0.001"/>
-  </equality>
+  {tendon_str}
+
+  <!-- grasp is still fixed by crawl.py's grasp_rung(), which writes eq_data
+       at runtime -- see that file's docstring. body1 is now "gripper_base",
+       the Robotiq gripper's own main body; the local anchor is fixed at
+       (0,0,0.145), which is where the gripper's built-in "pinch" site sits
+       relative to it (verified constant, not runtime-computed). -->
+  {equality_str}
 
   <sensor>
     <jointpos name="trolley_x"   joint="trolley_slide"/>
     <framepos name="fl_calf_pos" objtype="body" objname="FL_calf"/>
-    <framepos name="gc_palm_pos" objtype="site" objname="gc_grip_site"/>
+    <framepos name="gc_palm_pos" objtype="site" objname="pinch"/>
   </sensor>
 </mujoco>"""
 
