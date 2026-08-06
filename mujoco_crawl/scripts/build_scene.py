@@ -79,6 +79,14 @@ grip_raw = re.sub(r'(body1|body2)="base"', r'\1="gripper_base"', grip_raw)
 # don't need a second <compiler meshdir=.../> or to copy files anywhere.
 grip_raw = re.sub(r'file="([^"]+\.stl)"', rf'file="{GRIPPER_ASSETS}/\1"', grip_raw)
 
+# The 4 real collision geoms on the fingertips (right_pad1/2, left_pad1/2 --
+# these already carry realistic hardware friction/solref/solimp from the
+# real Robotiq model) need conaffinity extended to bit 1 (value 2) so they
+# can actually contact the rungs, which live in that isolated group so
+# nothing else in the scene (torso, trolley, floor) collides with them.
+for pad_name in ('right_pad1', 'right_pad2', 'left_pad1', 'left_pad2'):
+    grip_raw = grip_raw.replace(f'name="{pad_name}"/>', f'name="{pad_name}" contype="3" conaffinity="3"/>')
+
 grip_root = ET.fromstring(grip_raw)
 
 grip_default_el  = grip_root.find('default')
@@ -161,15 +169,13 @@ act_str = ET.tostring(combined_actuator, encoding='unicode')
 # ---- tendon: only the gripper defines one (couples its two finger joints)
 tendon_str = ET.tostring(grip_tendon_el, encoding='unicode')
 
-# ---- equality: gripper's own finger-coupling constraints + our rung-grasp
-#      connect (anchors computed and written at runtime by crawl.py)
+# ---- equality: only the gripper's own finger-coupling constraints remain.
+#      Grasping is now real contact + friction (see crawl.py's
+#      close_until_gripped), not a constraint hack, so there's no
+#      "fl_grip" connect here anymore.
 combined_equality = ET.Element('equality')
 for child in list(grip_equality_el):
     combined_equality.append(child)
-ET.SubElement(combined_equality, 'connect', {
-    'name': 'fl_grip', 'body1': 'gripper_base', 'body2': 'ladder',
-    'anchor': '0 0 0', 'active': 'false', 'solref': '0.01 1', 'solimp': '0.9 0.95 0.001',
-})
 equality_str = ET.tostring(combined_equality, encoding='unicode')
 
 r = 0.028
@@ -191,14 +197,14 @@ scene = f"""<mujoco model="go2_real_ladder_crawl">
             rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
       <geom type="box" size="1.5 0.007 0.007" pos="0 0 0.893"
             rgba="0.20 0.20 0.20 1" contype="0" conaffinity="0"/>
-      <geom name="rung_01" type="box" size="{r} {r} 0.436" pos="-1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_02" type="box" size="{r} {r} 0.436" pos="-0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_03" type="box" size="{r} {r} 0.436" pos="-0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_04" type="box" size="{r} {r} 0.436" pos="-0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_05" type="box" size="{r} {r} 0.436" pos=" 0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_06" type="box" size="{r} {r} 0.436" pos=" 0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_07" type="box" size="{r} {r} 0.436" pos=" 0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
-      <geom name="rung_08" type="box" size="{r} {r} 0.436" pos=" 1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="0" conaffinity="0"/>
+      <geom name="rung_01" type="box" size="{r} {r} 0.436" pos="-1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_02" type="box" size="{r} {r} 0.436" pos="-0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_03" type="box" size="{r} {r} 0.436" pos="-0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_04" type="box" size="{r} {r} 0.436" pos="-0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_05" type="box" size="{r} {r} 0.436" pos=" 0.15 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_06" type="box" size="{r} {r} 0.436" pos=" 0.45 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_07" type="box" size="{r} {r} 0.436" pos=" 0.75 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
+      <geom name="rung_08" type="box" size="{r} {r} 0.436" pos=" 1.05 0 0.45" rgba="0.12 0.12 0.12 1" contype="2" conaffinity="2" friction="0.9 0.02 0.002"/>
     </body>
 
     <body name="trolley" pos="0 0 0.12">
@@ -216,11 +222,9 @@ scene = f"""<mujoco model="go2_real_ladder_crawl">
 
   {tendon_str}
 
-  <!-- grasp is still fixed by crawl.py's grasp_rung(), which writes eq_data
-       at runtime -- see that file's docstring. body1 is now "gripper_base",
-       the Robotiq gripper's own main body; the local anchor is fixed at
-       (0,0,0.145), which is where the gripper's built-in "pinch" site sits
-       relative to it (verified constant, not runtime-computed). -->
+  <!-- Grasping is real contact + friction now (crawl.py's close_until_gripped),
+       not a constraint hack -- this <equality> block only has the Robotiq
+       2F-85's own built-in finger-coupling constraints. -->
   {equality_str}
 
   <sensor>
